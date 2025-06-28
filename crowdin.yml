@@ -1,2 +1,6 @@
 bundles:
   - 6
+files:
+  - source: '*.xcstrings'
+    translation: '%original_path%/%original_file_name%'
+    multilingual: 1
