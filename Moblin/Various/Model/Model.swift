@@ -223,6 +223,7 @@ class CreateStreamWizard: ObservableObject {
     @Published var twitchChannelId = ""
     @Published var kickChannelName = ""
     @Published var youTubeVideoId = ""
+    @Published var youTubeHandle = ""
     @Published var afreecaTvChannelName = ""
     @Published var afreecaTvStreamId = ""
     @Published var obsAddress = ""
@@ -1966,7 +1967,7 @@ final class Model: NSObject, ObservableObject, @unchecked Sendable {
     }
 
     func isYouTubeLiveChatConfigured() -> Bool {
-        return database.chat.enabled && stream.youTubeVideoId != ""
+        return database.chat.enabled && (stream.youTubeVideoId != "" || stream.youTubeHandle != "")
     }
 
     func isYouTubeLiveChatConnected() -> Bool {
@@ -2010,12 +2011,41 @@ final class Model: NSObject, ObservableObject, @unchecked Sendable {
         youTubeLiveChat?.stop()
         youTubeLiveChat = nil
         if isYouTubeLiveChatConfigured(), !isChatRemoteControl() {
-            youTubeLiveChat = YouTubeLiveChat(
-                model: self,
-                videoId: stream.youTubeVideoId,
-                settings: stream.chat
-            )
-            youTubeLiveChat!.start()
+            // Capture values to avoid concurrency issues
+            let currentVideoId = stream.youTubeVideoId
+            let currentUsername = stream.youTubeHandle
+            let currentChatSettings = stream.chat
+
+            Task {
+                var resolvedVideoId = currentVideoId
+
+                // If no video ID but we have a username, try to resolve it
+                if resolvedVideoId.isEmpty, !currentUsername.isEmpty {
+                    if let extractedVideoId = extractVideoIdFromHandle(currentUsername) {
+                        resolvedVideoId = extractedVideoId
+                    } else {
+                        await MainActor.run {
+                            self.makeErrorToast(
+                                title: String(localized: "YouTube Live Chat"),
+                                subTitle: String(localized: "\(currentUsername) is not currently live")
+                            )
+                        }
+                        return
+                    }
+                }
+
+                if !resolvedVideoId.isEmpty {
+                    let videoId = resolvedVideoId
+                    await MainActor.run {
+                        self.youTubeLiveChat = YouTubeLiveChat(
+                            model: self,
+                            videoId: videoId,
+                            settings: currentChatSettings
+                        )
+                        self.youTubeLiveChat!.start()
+                    }
+                }
+            }
         }
         updateChatMoreThanOneChatConfigured()
     }

@@ -127,6 +127,9 @@ extension Model {
         case .youTube:
             if !createStreamWizard.youTubeVideoId.isEmpty {
                 stream.youTubeVideoId = createStreamWizard.youTubeVideoId.trim()
+            } else if !createStreamWizard.youTubeHandle.isEmpty {
+                // Store the handle, video ID will be resolved when chat is started
+                stream.youTubeHandle = createStreamWizard.youTubeHandle.trim()
             }
         case .afreecaTv:
             if !createStreamWizard.afreecaTvChannelName.isEmpty, !createStreamWizard.afreecaTvStreamId.isEmpty {
@@ -170,6 +173,7 @@ extension Model {
         createStreamWizard.twitchAccessToken = ""
         createStreamWizard.kickChannelName = ""
         createStreamWizard.youTubeVideoId = ""
+        createStreamWizard.youTubeHandle = ""
         createStreamWizard.afreecaTvChannelName = ""
         createStreamWizard.afreecaTvStreamId = ""
         createStreamWizard.obsAddress = ""

@@ -1,6 +1,102 @@
 import Foundation
 
 private let userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:124.0) Gecko/20100101 Firefox/124.0"
+
+/// Extracts video ID from YouTube handle by checking if they're currently live
+/// Returns nil if the user is not live or if there's an error
+func extractVideoIdFromHandle(_ handle: String) -> String? {
+    guard let url = URL(string: "https://www.youtube.com/\(handle)/live") else {
+        print("YouTubeLiveChat: Invalid URL for handle: \(handle)")
+        return nil
+    }
+
+    print("YouTubeLiveChat: Checking if \(handle) is live at: \(url)")
+
+    var request = URLRequest(url: url)
+    request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+    request.setValue("CONSENT=YES+1", forHTTPHeaderField: "Cookie")
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var resultData: Data?
+    var resultResponse: URLResponse?
+    var resultError: Error?
+
+    let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        resultData = data
+        resultResponse = response
+        resultError = error
+        semaphore.signal()
+    }
+
+    task.resume()
+    semaphore.wait()
+
+    if let error = resultError {
+        print("YouTubeLiveChat: Network error: \(error)")
+        return nil
+    }
+
+    guard let data = resultData else {
+        print("YouTubeLiveChat: No data received")
+        return nil
+    }
+
+    guard let httpResponse = resultResponse as? HTTPURLResponse else {
+        print("YouTubeLiveChat: Not an HTTP response")
+        return nil
+    }
+
+    print("YouTubeLiveChat: HTTP Status: \(httpResponse.statusCode)")
+
+    guard httpResponse.statusCode == 200 else {
+        print("YouTubeLiveChat: HTTP error \(httpResponse.statusCode)")
+        return nil
+    }
+
+    guard let html = String(data: data, encoding: .utf8) else {
+        print("YouTubeLiveChat: Could not decode HTML as UTF-8")
+        return nil
+    }
+
+    print("YouTubeLiveChat: HTML length: \(html.count) characters")
+
+    // Look for the shortlinkUrl in the HTML with multiple patterns
+    let patterns = [
+        #"<link rel="shortlinkUrl" href="https://youtu\.be/([^"]+)""#,
+        #"<link rel='shortlinkUrl' href='https://youtu\.be/([^']+)'"#,
+        #"shortlinkUrl[^>]*href=[\"\']https://youtu\.be/([^\"\']+)"#,
+    ]
+
+    for (index, pattern) in patterns.enumerated() {
+        print("YouTubeLiveChat: Trying pattern \(index + 1): \(pattern)")
+
+        if let regex = try? NSRegularExpression(pattern: pattern, options: []),
+           let match = regex.firstMatch(in: html, options: [], range: NSRange(html.startIndex..., in: html)),
+           let videoIdRange = Range(match.range(at: 1), in: html)
+        {
+            let videoId = String(html[videoIdRange])
+            print("YouTubeLiveChat: Found video ID: \(videoId)")
+            return videoId
+        }
+    }
+
+    // Check if the HTML contains any shortlinkUrl at all
+    if html.contains("shortlinkUrl") {
+        print("YouTubeLiveChat: Found 'shortlinkUrl' in HTML but regex didn't match")
+        // Extract a snippet around shortlinkUrl for debugging
+        if let range = html.range(of: "shortlinkUrl") {
+            let start = html.index(range.lowerBound, offsetBy: -50, limitedBy: html.startIndex) ?? html.startIndex
+            let end = html.index(range.upperBound, offsetBy: 100, limitedBy: html.endIndex) ?? html.endIndex
+            let snippet = String(html[start ..< end])
+            print("YouTubeLiveChat: HTML snippet around shortlinkUrl: \(snippet)")
+        }
+    } else {
+        print("YouTubeLiveChat: No 'shortlinkUrl' found in HTML - user is likely not live")
+    }
+
+    return nil
+}
+
 private let minimumPollDelayMs = 200
 private let maximumPollDelayMs = 3000
 
