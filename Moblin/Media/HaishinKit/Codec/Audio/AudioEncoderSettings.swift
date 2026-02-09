@@ -34,7 +34,8 @@ struct AudioEncoderSettings {
                 )
             case .opus:
                 streamDescription = AudioStreamBasicDescription(
-                    mSampleRate: inSourceFormat.mSampleRate,
+                    // Opus RTP clock is fixed at 48 kHz; using 48k output avoids timestamp/rate drift.
+                    mSampleRate: 48_000,
                     mFormatID: kAudioFormatOpus,
                     mFormatFlags: 0,
                     mBytesPerPacket: 0,
