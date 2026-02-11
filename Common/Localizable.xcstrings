@@ -24671,6 +24671,9 @@
         }
       }
     },
+    "Add STUN server" : {
+
+    },
     "Advanced" : {
       "localizations" : {
         "de" : {
@@ -26304,6 +26307,9 @@
           }
         }
       }
+    },
+    "Also supported: whips:// and whip://" : {
+
     },
     "Alternatively, use a website as assistant." : {
       "localizations" : {
@@ -36933,6 +36939,9 @@
           }
         }
       }
+    },
+    "Bearer token (optional)" : {
+
     },
     "Beauty" : {
       "localizations" : {
@@ -48177,6 +48186,7 @@
       }
     },
     "Chat is empty." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -57951,6 +57961,7 @@
       }
     },
     "Create stream marker" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -76289,6 +76300,9 @@
           }
         }
       }
+    },
+    "Example: https://whip.example.com/ingest/stream" : {
+
     },
     "Example: rtmp://a.rtmp.youtube.com/live2/1bk2-0d03-9683-7k65-e4d3" : {
       "localizations" : {
@@ -109997,6 +110011,9 @@
         }
       }
     },
+    "Malformed WHIP URL" : {
+
+    },
     "Manage streams" : {
       "localizations" : {
         "de" : {
@@ -133952,6 +133969,12 @@
         }
       }
     },
+    "Optional STUN server list. Example: stun:stun.example.com:3478" : {
+
+    },
+    "Optional token sent as Authorization: Bearer <token> when connecting to the WHIP server." : {
+
+    },
     "Optional, but simplifies the setup." : {
       "localizations" : {
         "de" : {
@@ -134249,6 +134272,7 @@
       }
     },
     "Other" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -159856,6 +159880,7 @@
       }
     },
     "Save replay" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -167280,6 +167305,7 @@
       }
     },
     "Set clock" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -190177,6 +190203,9 @@
         }
       }
     },
+    "stun:stun.example.com:3478" : {
+
+    },
     "Style sheet" : {
       "localizations" : {
         "de" : {
@@ -196244,6 +196273,9 @@
           }
         }
       }
+    },
+    "Template: https://my_whip_server/whip/endpoint" : {
+
     },
     "Template: rtmp://[nearby_ingest_endpoint](https://help.twitch.tv/s/twitch-ingest-recommendation)/app/" : {
       "localizations" : {
@@ -223902,6 +223934,36 @@
 
     },
     "When \"Audio only\" mode is selected, no video will be rendered at all. Only audio will play." : {
+
+    },
+    "WHIP" : {
+
+    },
+    "WHIP answer missing" : {
+
+    },
+    "WHIP answer rejected" : {
+
+    },
+    "WHIP bad server response" : {
+
+    },
+    "WHIP connect failed" : {
+
+    },
+    "WHIP disconnected (%@)" : {
+
+    },
+    "WHIP offer failed" : {
+
+    },
+    "WHIP sends one H.264 video track and one Opus audio track." : {
+
+    },
+    "WHIP server returned %lld" : {
+
+    },
+    "whips:// maps to https://, whip:// maps to http://" : {
 
     },
     "Whirlpool" : {

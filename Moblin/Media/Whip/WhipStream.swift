@@ -485,16 +485,28 @@ private struct WhipRtcTrackConfiguration {
     func addTrack(connection: Int32, streamId: String) throws -> WhipRtcTrack {
         let name = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(16))
         let trackId = UUID().uuidString
+        let midPointer = strdup(mid)
+        let namePointer = strdup(name)
+        let msidPointer = strdup(streamId)
+        let trackIdPointer = strdup(trackId)
+        let profilePointer = profile.flatMap { strdup($0) }
+        defer {
+            free(midPointer)
+            free(namePointer)
+            free(msidPointer)
+            free(trackIdPointer)
+            free(profilePointer)
+        }
         var trackInit = rtcTrackInit(
             direction: RTC_DIRECTION_SENDONLY,
             codec: codec,
             payloadType: payloadType,
             ssrc: ssrc,
-            mid: strdup(mid),
-            name: strdup(name),
-            msid: strdup(streamId),
-            trackId: strdup(trackId),
-            profile: profile == nil ? nil : strdup(profile)
+            mid: midPointer.map { UnsafePointer($0) },
+            name: namePointer.map { UnsafePointer($0) },
+            msid: msidPointer.map { UnsafePointer($0) },
+            trackId: trackIdPointer.map { UnsafePointer($0) },
+            profile: profilePointer.map { UnsafePointer($0) }
         )
         let id = try whipCheck(rtcAddTrackEx(connection, &trackInit))
         return try WhipRtcTrack(id: id)
@@ -509,17 +521,22 @@ private final class WhipPeerConnection {
     var onSignalingStateChanged: ((rtcSignalingState) -> Void)?
     var onLocalCandidate: ((String, String) -> Void)?
 
-    init() throws {
+    init(stunUrls: [String]) throws {
         var configuration = rtcConfiguration()
         var createdId: Int32 = -1
-        if let stunServer = strdup("stun:stun.l.google.com:19302") {
-            var iceServers: [UnsafePointer<CChar>?] = [UnsafePointer(stunServer)]
+        let stunServers = stunUrls.compactMap { strdup($0) }
+        defer {
+            for stunServer in stunServers {
+                free(stunServer)
+            }
+        }
+        if !stunServers.isEmpty {
+            var iceServers: [UnsafePointer<CChar>?] = stunServers.map { UnsafePointer($0) }
             iceServers.withUnsafeMutableBufferPointer { buffer in
                 configuration.iceServers = buffer.baseAddress
                 configuration.iceServersCount = Int32(buffer.count)
                 createdId = rtcCreatePeerConnection(&configuration)
             }
-            free(stunServer)
         } else {
             createdId = rtcCreatePeerConnection(&configuration)
         }
@@ -646,15 +663,16 @@ final class WhipStream {
     private var stopping = false
     private var offerSent = false
     private var useNativeOpusPacketizer = false
+    private var activeSessionToken = UUID()
 
     init(processor: Processor, delegate: WhipStreamDelegate) {
         self.processor = processor
         self.delegate = delegate
     }
 
-    func start(url: String, bearerToken: String) {
+    func start(url: String, bearerToken: String, stunServers: [String]) {
         whipQueue.async {
-            self.startInternal(url: url, bearerToken: bearerToken)
+            self.startInternal(url: url, bearerToken: bearerToken, stunServers: stunServers)
         }
     }
 
@@ -670,12 +688,14 @@ final class WhipStream {
         }
     }
 
-    private func startInternal(url: String, bearerToken: String) {
+    private func startInternal(url: String, bearerToken: String, stunServers: [String]) {
         stopInternal(sendDelete: true)
         guard let endpointUrl = makeEndpointUrl(url: url) else {
             notifyDisconnected(reason: String(localized: "Malformed WHIP URL"))
             return
         }
+        let sessionToken = UUID()
+        activeSessionToken = sessionToken
         self.endpointUrl = endpointUrl
         authorizationHeader = makeAuthorizationHeader(token: bearerToken)
         totalByteCount = 0
@@ -683,8 +703,9 @@ final class WhipStream {
         stopping = false
         offerSent = false
         useNativeOpusPacketizer = false
+        let stunUrls = makeStunUrls(stunServers: stunServers)
         logger.info(
-            "whip: Start endpoint=\(endpointUrl.absoluteString) auth=\(authorizationHeader == nil ? "none" : "bearer")"
+            "whip: Start endpoint=\(endpointUrl.absoluteString) auth=\(authorizationHeader == nil ? "none" : "bearer") stun=\(stunUrls.count)"
         )
         let audioPacketizer = WhipOpusPacketizer(ssrc: Self.makeSsrc())
         let audioRtpPacketizer = WhipOpusRtpPacketizer(ssrc: audioPacketizer.ssrc, payloadType: whipOpusPayloadType)
@@ -693,19 +714,28 @@ final class WhipStream {
         self.audioRtpPacketizer = audioRtpPacketizer
         self.videoPacketizer = videoPacketizer
         do {
-            let peerConnection = try WhipPeerConnection()
+            let peerConnection = try WhipPeerConnection(stunUrls: stunUrls)
             peerConnection.onConnectionStateChanged = { [weak self] state in
                 whipQueue.async {
-                    self?.handleConnectionStateChanged(state: state)
+                    guard let self, self.isSessionActive(sessionToken) else {
+                        return
+                    }
+                    self.handleConnectionStateChanged(state: state)
                 }
             }
             peerConnection.onGatheringStateChanged = { [weak self] state in
                 whipQueue.async {
-                    self?.handleGatheringStateChanged(state: state)
+                    guard let self, self.isSessionActive(sessionToken) else {
+                        return
+                    }
+                    self.handleGatheringStateChanged(state: state, sessionToken: sessionToken)
                 }
             }
-            peerConnection.onIceStateChanged = { state in
+            peerConnection.onIceStateChanged = { [weak self] state in
                 whipQueue.async {
+                    guard let self, self.isSessionActive(sessionToken) else {
+                        return
+                    }
                     if state == .failed || state == .disconnected {
                         logger.info("whip: ICE state \(state.toString())")
                     }
@@ -734,7 +764,10 @@ final class WhipStream {
             try peerConnection.setLocalDescriptionOffer()
             // Fallback: if gathering callback is not delivered, send current local SDP after a short delay.
             whipQueue.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                self?.sendCurrentLocalOfferIfNeeded()
+                guard let self, self.isSessionActive(sessionToken) else {
+                    return
+                }
+                self.sendCurrentLocalOfferIfNeeded(sessionToken: sessionToken)
             }
         } catch {
             logger.info("whip: Start failed with error: \(error)")
@@ -742,17 +775,18 @@ final class WhipStream {
         }
     }
 
-    private func handleGatheringStateChanged(state: WhipGatheringState) {
+    private func handleGatheringStateChanged(state: WhipGatheringState, sessionToken: UUID) {
         switch state {
         case .complete:
-            sendCurrentLocalOfferIfNeeded()
+            sendCurrentLocalOfferIfNeeded(sessionToken: sessionToken)
         case .new, .inProgress:
             break
         }
     }
 
-    private func sendCurrentLocalOfferIfNeeded() {
+    private func sendCurrentLocalOfferIfNeeded(sessionToken: UUID) {
         guard !stopping,
+              isSessionActive(sessionToken),
               !offerSent,
               offerTask == nil,
               let endpointUrl,
@@ -766,7 +800,7 @@ final class WhipStream {
                 return
             }
             offerSent = true
-            sendOffer(endpointUrl: endpointUrl, offer: offer)
+            sendOffer(endpointUrl: endpointUrl, offer: offer, sessionToken: sessionToken)
         } catch {
             logger.info("whip: Failed to get local offer: \(error)")
         }
@@ -794,7 +828,7 @@ final class WhipStream {
         }
     }
 
-    private func sendOffer(endpointUrl: URL, offer: String) {
+    private func sendOffer(endpointUrl: URL, offer: String, sessionToken: UUID) {
         var request = URLRequest(url: endpointUrl)
         request.httpMethod = "POST"
         request.setContentType("application/sdp")
@@ -804,6 +838,9 @@ final class WhipStream {
         request.httpBody = offer.utf8Data
         offerTask = URLSession.shared.dataTask(with: request) { data, response, error in
             whipQueue.async {
+                guard self.isSessionActive(sessionToken) else {
+                    return
+                }
                 self.offerTask = nil
                 guard !self.stopping else {
                     return
@@ -851,6 +888,7 @@ final class WhipStream {
 
     private func stopInternal(sendDelete: Bool) {
         stopping = true
+        activeSessionToken = UUID()
         stopEncoding()
         offerTask?.cancel()
         offerTask = nil
@@ -871,6 +909,10 @@ final class WhipStream {
         connected = false
         offerSent = false
         stopping = false
+    }
+
+    private func isSessionActive(_ token: UUID) -> Bool {
+        return token == activeSessionToken
     }
 
     private func sendDeleteRequest(url: URL) {
@@ -950,6 +992,28 @@ final class WhipStream {
             return token
         }
         return "Bearer \(token)"
+    }
+
+    private func makeStunUrls(stunServers: [String]) -> [String] {
+        let customStunUrls = stunServers
+            .map { $0.trim() }
+            .filter { !$0.isEmpty }
+            .map { server in
+                let serverLowercased = server.lowercased()
+                if serverLowercased.hasPrefix("stun:") || serverLowercased.hasPrefix("stuns:") {
+                    return server
+                } else {
+                    return "stun:\(server)"
+                }
+            }
+        if !customStunUrls.isEmpty {
+            return customStunUrls
+        }
+        return [
+            "stun:stun.l.google.com:19302",
+            "stun:stun1.l.google.com:19302",
+            "stun:stun.cloudflare.com:3478",
+        ]
     }
 
     private static func makeSsrc() -> UInt32 {

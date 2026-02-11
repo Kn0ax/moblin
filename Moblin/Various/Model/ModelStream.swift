@@ -245,7 +245,11 @@ extension Model {
             stream.audioCodec = .opus
             setAudioStreamFormat(format: .opus)
         }
-        media.whipStartStream(url: stream.url, bearerToken: stream.whip.bearerToken)
+        media.whipStartStream(
+            url: stream.url,
+            bearerToken: stream.whip.bearerToken,
+            stunServers: stream.whip.stunServers
+        )
     }
 
     func stopNetStream() {

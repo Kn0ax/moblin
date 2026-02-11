@@ -627,9 +627,9 @@ final class Media: NSObject {
         ristStream?.stop()
     }
 
-    func whipStartStream(url: String, bearerToken: String) {
+    func whipStartStream(url: String, bearerToken: String, stunServers: [String]) {
         adaptiveBitrate = nil
-        whipStream?.start(url: url, bearerToken: bearerToken)
+        whipStream?.start(url: url, bearerToken: bearerToken, stunServers: stunServers)
     }
 
     func whipStopStream() {

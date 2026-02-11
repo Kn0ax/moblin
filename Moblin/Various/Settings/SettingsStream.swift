@@ -553,26 +553,42 @@ class SettingsStreamRist: Codable {
 
 class SettingsStreamWhip: Codable, ObservableObject {
     @Published var bearerToken: String = ""
+    @Published var stunServers: [String] = []
 
     init() {}
 
     enum CodingKeys: CodingKey {
-        case bearerToken
+        case bearerToken,
+             stunServers
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(.bearerToken, bearerToken)
+        try container.encode(.stunServers, stunServers)
     }
 
     required init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         bearerToken = container.decode(.bearerToken, String.self, "")
+        if let stunServersArray = try? container.decode([String].self, forKey: .stunServers) {
+            stunServers = stunServersArray
+                .map { $0.trim() }
+                .filter { !$0.isEmpty }
+        } else if let stunServersString = try? container.decode(String.self, forKey: .stunServers) {
+            stunServers = stunServersString
+                .split(whereSeparator: { [",", ";", "\n"].contains($0) })
+                .map { $0.trim() }
+                .filter { !$0.isEmpty }
+        } else {
+            stunServers = []
+        }
     }
 
     func clone() -> SettingsStreamWhip {
         let new = SettingsStreamWhip()
         new.bearerToken = bearerToken
+        new.stunServers = stunServers
         return new
     }
 }
