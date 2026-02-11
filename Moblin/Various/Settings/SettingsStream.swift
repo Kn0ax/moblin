@@ -151,6 +151,7 @@ enum SettingsStreamProtocol: String, Codable {
     case rtmp = "RTMP"
     case srt = "SRT"
     case rist = "RIST"
+    case whip = "WHIP"
 
     init(from decoder: Decoder) throws {
         self = try SettingsStreamProtocol(rawValue: decoder.singleValueContainer().decode(RawValue.self)) ??
@@ -164,6 +165,8 @@ enum SettingsStreamDetailedProtocol {
     case srt
     case srtla
     case rist
+    case whip
+    case whips
 }
 
 class SettingsStreamSrtConnectionPriority: Codable, Identifiable {
@@ -544,6 +547,48 @@ class SettingsStreamRist: Codable {
         let new = SettingsStreamRist()
         new.adaptiveBitrateEnabled = adaptiveBitrateEnabled
         new.bonding = bonding
+        return new
+    }
+}
+
+class SettingsStreamWhip: Codable, ObservableObject {
+    @Published var bearerToken: String = ""
+    @Published var stunServers: [String] = []
+
+    init() {}
+
+    enum CodingKeys: CodingKey {
+        case bearerToken,
+             stunServers
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(.bearerToken, bearerToken)
+        try container.encode(.stunServers, stunServers)
+    }
+
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        bearerToken = container.decode(.bearerToken, String.self, "")
+        if let stunServersArray = try? container.decode([String].self, forKey: .stunServers) {
+            stunServers = stunServersArray
+                .map { $0.trim() }
+                .filter { !$0.isEmpty }
+        } else if let stunServersString = try? container.decode(String.self, forKey: .stunServers) {
+            stunServers = stunServersString
+                .split(whereSeparator: { [",", ";", "\n"].contains($0) })
+                .map { $0.trim() }
+                .filter { !$0.isEmpty }
+        } else {
+            stunServers = []
+        }
+    }
+
+    func clone() -> SettingsStreamWhip {
+        let new = SettingsStreamWhip()
+        new.bearerToken = bearerToken
+        new.stunServers = stunServers
         return new
     }
 }
@@ -1028,6 +1073,7 @@ class SettingsStream: Codable, Identifiable, Equatable, ObservableObject, Named 
     var srt: SettingsStreamSrt = .init()
     var rtmp: SettingsStreamRtmp = .init()
     var rist: SettingsStreamRist = .init()
+    var whip: SettingsStreamWhip = .init()
     @Published var maxKeyFrameInterval: Int32 = 2
     @Published var audioCodec: SettingsStreamAudioCodec = .aac
     var audioBitrate: Int = 128_000
@@ -1113,6 +1159,7 @@ class SettingsStream: Codable, Identifiable, Equatable, ObservableObject, Named 
              srt,
              rtmp,
              rist,
+             whip,
              captureSessionPresetEnabled,
              captureSessionPreset,
              maxKeyFrameInterval,
@@ -1197,6 +1244,7 @@ class SettingsStream: Codable, Identifiable, Equatable, ObservableObject, Named 
         try container.encode(.srt, srt)
         try container.encode(.rtmp, rtmp)
         try container.encode(.rist, rist)
+        try container.encode(.whip, whip)
         try container.encode(.maxKeyFrameInterval, maxKeyFrameInterval)
         try container.encode(.audioCodec, audioCodec)
         try container.encode(.audioBitrate, audioBitrate)
@@ -1290,6 +1338,7 @@ class SettingsStream: Codable, Identifiable, Equatable, ObservableObject, Named 
         srt = container.decode(.srt, SettingsStreamSrt.self, .init())
         rtmp = container.decode(.rtmp, SettingsStreamRtmp.self, .init())
         rist = container.decode(.rist, SettingsStreamRist.self, .init())
+        whip = container.decode(.whip, SettingsStreamWhip.self, .init())
         maxKeyFrameInterval = container.decode(.maxKeyFrameInterval, Int32.self, 2)
         audioCodec = container.decode(.audioCodec, SettingsStreamAudioCodec.self, .aac)
         audioBitrate = container.decode(.audioBitrate, Int.self, 128_000)
@@ -1374,6 +1423,7 @@ class SettingsStream: Codable, Identifiable, Equatable, ObservableObject, Named 
         new.srt = srt.clone()
         new.rtmp = rtmp.clone()
         new.rist = rist.clone()
+        new.whip = whip.clone()
         new.maxKeyFrameInterval = maxKeyFrameInterval
         new.audioCodec = audioCodec
         new.audioBitrate = audioBitrate
@@ -1410,6 +1460,14 @@ class SettingsStream: Codable, Identifiable, Equatable, ObservableObject, Named 
             return .srt
         case "rist":
             return .rist
+        case "whip":
+            return .whip
+        case "whips":
+            return .whip
+        case "http":
+            return .whip
+        case "https":
+            return .whip
         default:
             return .rtmp
         }
@@ -1427,6 +1485,14 @@ class SettingsStream: Codable, Identifiable, Equatable, ObservableObject, Named 
             return .srtla
         case "rist":
             return .rist
+        case "whip":
+            return .whip
+        case "whips":
+            return .whips
+        case "http":
+            return .whip
+        case "https":
+            return .whips
         default:
             return .rtmp
         }
@@ -1437,6 +1503,8 @@ class SettingsStream: Codable, Identifiable, Equatable, ObservableObject, Named 
             return "SRTLA"
         } else if getProtocol() == .rtmp && isRtmps() {
             return "RTMPS"
+        } else if getProtocol() == .whip {
+            return "WHIP"
         } else {
             return getProtocol().rawValue
         }

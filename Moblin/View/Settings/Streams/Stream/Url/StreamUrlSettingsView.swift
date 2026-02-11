@@ -108,6 +108,27 @@ private struct SrtHelpView: View {
     }
 }
 
+private struct WhipHelpView: View {
+    var body: some View {
+        Section {
+            VStack(alignment: .leading) {
+                Text("Template: https://my_whip_server/whip/endpoint")
+                Text("Example: https://whip.example.com/ingest/stream")
+            }
+        } header: {
+            Text("WHIP")
+        }
+        Section {
+            VStack(alignment: .leading) {
+                Text("Also supported: whips:// and whip://")
+                Text("whips:// maps to https://, whip:// maps to http://")
+            }
+        } footer: {
+            Text("WHIP sends one H.264 video track and one Opus audio track.")
+        }
+    }
+}
+
 private struct UrlSettingsView: View {
     @EnvironmentObject var model: Model
     @Environment(\.dismiss) var dismiss
@@ -173,6 +194,7 @@ private struct UrlSettingsView: View {
                             if showSrtHelp {
                                 SrtHelpView()
                             }
+                            WhipHelpView()
                         }
                         .navigationTitle("Help")
                         .toolbar {

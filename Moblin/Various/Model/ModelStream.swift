@@ -189,6 +189,8 @@ extension Model {
             startNetStreamSrt()
         case .rist:
             startNetStreamRist()
+        case .whip:
+            startNetStreamWhip()
         }
         updateSpeed(now: .now)
         streamBecameBrokenTime = nil
@@ -234,12 +236,29 @@ extension Model {
         updateAdaptiveBitrateRistIfEnabled()
     }
 
+    private func startNetStreamWhip() {
+        if stream.codec != .h264avc {
+            stream.codec = .h264avc
+            setStreamCodec()
+        }
+        if stream.audioCodec != .opus {
+            stream.audioCodec = .opus
+            setAudioStreamFormat(format: .opus)
+        }
+        media.whipStartStream(
+            url: stream.url,
+            bearerToken: stream.whip.bearerToken,
+            stunServers: stream.whip.stunServers
+        )
+    }
+
     func stopNetStream() {
         moblink.streamer?.stopTunnels()
         reconnectTimer.stop()
         media.rtmpStopStream()
         media.srtStopStream()
         media.ristStopStream()
+        media.whipStopStream()
         streamStartTime = nil
         updateStreamUptime(now: .now)
         updateSpeed(now: .now)
@@ -528,6 +547,18 @@ extension Model {
     private func handleRistDisconnected() {
         DispatchQueue.main.async {
             self.onDisconnected(reason: "RIST disconnected")
+        }
+    }
+
+    private func handleWhipConnected() {
+        DispatchQueue.main.async {
+            self.onConnected()
+        }
+    }
+
+    private func handleWhipDisconnected(reason: String) {
+        DispatchQueue.main.async {
+            self.onDisconnected(reason: reason)
         }
     }
 
@@ -876,6 +907,14 @@ extension Model: MediaDelegate {
 
     func mediaOnRistDisconnected() {
         handleRistDisconnected()
+    }
+
+    func mediaOnWhipConnected() {
+        handleWhipConnected()
+    }
+
+    func mediaOnWhipDisconnected(_ reason: String) {
+        handleWhipDisconnected(reason: reason)
     }
 
     func mediaOnAudioMuteChange() {
